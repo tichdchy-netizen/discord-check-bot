@@ -1,65 +1,36 @@
-const { Client, GatewayIntentBits, SlashCommandBuilder } = require("discord.js");
-const axios = require("axios");
-
-// ================= CONFIG =================
-const TOKEN = process.env.TOKEN;       // ใส่ใน Render Environment
-const API_URL = process.env.API_URL;   // ใส่ใน Render Environment
-// ==========================================
-
-const client = new Client({
-  intents: [GatewayIntentBits.Guilds],
-});
-
-// ====== REGISTER SLASH COMMAND ======
-client.once("clientReady", async () => {
-  const command = new SlashCommandBuilder()
-    .setName("check")
-    .setDescription("ตรวจสอบชื่อจาก Google Sheet")
-    .addStringOption(option =>
-      option
-        .setName("name")
-        .setDescription("ชื่อที่ต้องการตรวจสอบ")
-        .setRequired(true)
-    );
-
-  await client.application.commands.create(command);
-  console.log("✅ Bot is online & command registered");
-});
-
-// ====== HANDLE COMMAND ======
-client.on("interactionCreate", async interaction => {
-  if (!interaction.isChatInputCommand()) return;
-  if (interaction.commandName !== "check") return;
-
-  // ตอบ Discord ทันที กัน error ไม่ตอบสนอง
-  await interaction.reply({
-    content: "🔍 กำลังตรวจสอบข้อมูล...",
-    ephemeral: true
-  });
-
-  const name = interaction.options.getString("name");
-
-  try {
-    const res = await axios.get(API_URL, {
-      params: { name },
-      timeout: 15000
-    });
-
-    if (res.data.status === "found") {
-      await interaction.editReply(
-        `✅ พบชื่อ: ${res.data.name}`
-      );
-    } else {
-      await interaction.editReply(
-        "❌ ไม่พบชื่อในรายการ"
-      );
-    }
-  } catch (err) {
-    await interaction.editReply(
-      "⚠️ เกิดข้อผิดพลาดในการเชื่อมต่อ กรุณาลองใหม่"
-    );
+function doGet(e) {
+  const name = e?.parameter?.name;
+  if (!name) {
+    return ContentService.createTextOutput(
+      JSON.stringify({ status: "error", message: "no name" })
+    ).setMimeType(ContentService.MimeType.JSON);
   }
-});
 
-// ====== LOGIN ======
-client.login(TOKEN);
+  const sheet = SpreadsheetApp
+    .openById("PUT_SHEET_ID_HERE") // 👈 ใส่ Sheet ID
+    .getSheetByName("Sheet1");    // 👈 ชื่อชีท
+
+  const data = sheet.getDataRange().getValues();
+
+  const input = name.replace(/\s+/g, "").toLowerCase();
+
+  for (let i = 1; i < data.length; i++) {
+    const target = data[i][0]
+      ?.toString()
+      .replace(/\s+/g, "")
+      .toLowerCase();
+
+    if (target && target.includes(input)) {
+      return ContentService.createTextOutput(
+        JSON.stringify({
+          status: "found",
+          name: data[i][0]
+        })
+      ).setMimeType(ContentService.MimeType.JSON);
+    }
+  }
+
+  return ContentService.createTextOutput(
+    JSON.stringify({ status: "not_found" })
+  ).setMimeType(ContentService.MimeType.JSON);
+}
